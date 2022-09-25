@@ -86,6 +86,13 @@ def run(
         hide_conf=False,  # hide confidences
         half=False,  # use FP16 half-precision inference
         dnn=False,  # use OpenCV DNN for ONNX inference
+        nut_tracking=True, # Execute nut tracking
+        jet_blast_time=0.1, #length of jet blast (s)
+        conveyor_speed=0.167, # Coveyor speed (m/s)
+        bottom_to_jet=0.4, #bottom of image to jet disatance (m)
+        frame_Height=0.25, #frame height (m)
+        time_window=5/1000, #time deviation window for jet activation (ms)
+        col_align_xpos_file='' #file destination containing Alignment of coloumns for jets (px)
 ):
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
@@ -94,6 +101,18 @@ def run(
     webcam = source.isnumeric() or source.endswith('.txt') or (is_url and not is_file)
     if is_url and is_file:
         source = check_file(source)  # download
+
+    #Program variables:
+    jet_time_matrix = [[0]]*12
+    #Changable Variables
+    jetBlast = jet_blast_time #length of jet blast (s)
+    speed = conveyor_speed #Coveyor speed (m/s)
+    b2J = bottom_to_jet #bottom of image to jet disatance (m)
+    fHeight = frame_Height #frame height (m)
+    timeWindow = time_window #time deviation window for jet activation (ms)
+
+    # TODO: Extract this from a filepath
+    colAlign = [125, 210, 310, 405, 505, 600, 700, 795, 890, 985, 1090] #Alignment of coloumns for jets (px)
 
     # Directories
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
@@ -124,42 +143,42 @@ def run(
     for path, im, im0s, vid_cap, s in dataset:
         t1 = time_sync()
 
-
-        #Distorion correction
-        distort=True #Enable distortion correction
-        if distort:
-            mtx = np.array([[819.83614964,0.,641.69044164],[0.,819.09003266,341.81366636],[0.,0.,1.]])
-            dist = np.array([[-0.42673426,0.19252523,-0.00092188,-0.00148215,0.04018296]])
-
-            if loaded==LoadedStatus.NONE:
-                h,  w = im0s[0].shape[:2]
-                newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w,h), 1, (w,h))
-                loaded = LoadedStatus.CAMERA_LOADED
-
-
-            x, y, w, h = roi
-            im1=im[0,0]
-            x1, y1, w1, h1 = roi
-            x1, y1, w1, h1 = x, y, w, h
-
-            for i in [0,1,2]:
-
-                h1, w1 = im.shape[2:]
-                im1 = im[0,i]
-                im1 = im1[12:h1-12, 0:w1]
-                im1 = cv2.resize(im1, (1280,720))
-                dst = cv2.undistort(im1, mtx, dist, None, newcameramtx)
+        if nut_tracking:
+            #Distorion correction
+            distort=True #Enable distortion correction
+            if distort:
+                mtx = np.array([[819.83614964,0.,641.69044164],[0.,819.09003266,341.81366636],[0.,0.,1.]])
+                dist = np.array([[-0.42673426,0.19252523,-0.00092188,-0.00148215,0.04018296]])
+    
+                if loaded==LoadedStatus.NONE:
+                    h,  w = im0s[0].shape[:2]
+                    newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w,h), 1, (w,h))
+                    loaded = LoadedStatus.CAMERA_LOADED
+    
+    
+                x, y, w, h = roi
+                im1=im[0,0]
+                x1, y1, w1, h1 = roi
+                x1, y1, w1, h1 = x, y, w, h
+    
+                for i in [0,1,2]:
+                
+                    h1, w1 = im.shape[2:]
+                    im1 = im[0,i]
+                    im1 = im1[12:h1-12, 0:w1]
+                    im1 = cv2.resize(im1, (1280,720))
+                    dst = cv2.undistort(im1, mtx, dist, None, newcameramtx)
+                    x, y, w, h = roi
+                    dst = dst[y:y+h, x:x+w]
+                    dst = cv2.resize(dst, (640,360))
+                    for j in range(360):
+                        im[0,i,j+12]=dst[j]
+    
+    
+                dst = cv2.undistort(im0s[0], mtx, dist, None, newcameramtx)
                 x, y, w, h = roi
                 dst = dst[y:y+h, x:x+w]
-                dst = cv2.resize(dst, (640,360))
-                for j in range(360):
-                    im[0,i,j+12]=dst[j]
-
-
-            dst = cv2.undistort(im0s[0], mtx, dist, None, newcameramtx)
-            x, y, w, h = roi
-            dst = dst[y:y+h, x:x+w]
-            im0s[0]=dst
+                im0s[0]=dst
 
 
         ims = im[0,0]
@@ -262,57 +281,50 @@ def run(
         # Print time (inference-only)
         #LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
 
-        #CUSTOM CODE-----------------------------------------------------------------------------------------------------------
-        if loaded == LoadedStatus.CAMERA_LOADED:
-            loaded = LoadedStatus.CAMERA_USED
+        # Logic gfor the nut tracking application
+        if(nut_tracking):
+            #CUSTOM CODE-----------------------------------------------------------------------------------------------------------
+            if loaded == LoadedStatus.CAMERA_LOADED:
+                loaded = LoadedStatus.CAMERA_USED
 
-            #Changable Variables
-            speed = 0.167 #Coveyor speed (m/s)
-            b2J = 0.4 #bottom of image to jet disatance (m)
-            fHeight = 0.25 #frame height (m)
-            colAlign = [125, 210, 310, 405, 505, 600, 700, 795, 890, 985, 1090] #Alignment of coloumns for jets (px)
-            timeWindow = 5/1000 #time deviation window for jet activation (ms)
-            jetBlast = 0.1 #length of jet blast (s)
-
-            #Program variables:
-            jetTime = [[0]]*12
-
-        #Calc of jet activation time if bad
-        for i in range(len(det)): 
-            class_prediction = det[i, 5]
-            if class_prediction != NutClasses.GOOD:
-                actTime = 0
-                distance_to_Jet = 0
-                lastInQ = 0
-                xpos = det[i,0]
-
-                jet_index = nut_utils.GetJetIndex(xpos, colAlign)
-                distance_to_Jet = (fHeight * (1 - det[i, 1] / h)) + b2J #Calculate distance between jet and nut
-                time_to_jet = float((distance_to_Jet / speed)) #time to activate in sec
-                actTime = time_sync() + time_to_jet #time to activate in program time space
-                jetTemp = jetTime[jet_index]
-                lastInQ = jetTemp[-1] #retrieve last activation time for jet
-                if actTime - lastInQ > timeWindow: #Check if within time window
-                    actTList = [actTime]
-                    jetTime[jet_index] = jetTime[jet_index] + actTList #add new time entry
-
-        for i in len(jetTime): #Send jet start to arduino when time has arrived
-            jetTemp = jetTime[i] # Get the times of the current jet
-            if len(jetTemp) > 1: # If there is a time in the current jet
-                if jetTemp[1] <= time_sync(): # get the first time in the list and check if is earlier or equal to right now
-                    print("FIIIREEE!!!  " + str(i)) #Pretty self explanitory
-                    JetController.TurnOffJet(13) #Send activation to arduino -----------------------------------------13 for testing
-                    #jetTime[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
-
-        for i in len(jetTime): #Send jet stop to arduino when time has arrived
-            jetTemp = jetTime[i]
-            if len(jetTemp) > 1:
-                if jetTemp[1] + jetBlast <= time_sync():
-                    JetController.TurnOffJet(13) #Send deactivation to arduino -----------------------------------------13 for testing
-                    jetTime[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
+                
+                
 
 
-    #CUSTOM CODE-----------------------------------------------------------------------------------------------------------
+
+            #Calc of jet activation time if bad
+            for i in range(len(det)): 
+                class_prediction = det[i, 5]
+                if class_prediction != NutClasses.GOOD:
+                    actTime = 0
+                    distance_to_Jet = 0
+                    lastInQ = 0
+                    xpos = det[i,0]
+
+                    jet_index = nut_utils.GetJetIndex(xpos, colAlign)
+                    distance_to_Jet = (fHeight * (1 - det[i, 1] / h)) + b2J #Calculate distance between jet and nut
+                    time_to_jet = float((distance_to_Jet / speed)) #time to activate in sec
+                    actTime = time_sync() + time_to_jet #time to activate in program time space
+                    jetTemp = jet_time_matrix[jet_index]
+                    lastInQ = jetTemp[-1] #retrieve last activation time for jet
+                    if actTime - lastInQ > timeWindow: #Check if within time window
+                        actTList = [actTime]
+                        jet_time_matrix[jet_index] = jet_time_matrix[jet_index] + actTList #add new time entry
+
+            for i in len(jet_time_matrix): #Send jet start to arduino when time has arrived
+                jetTemp = jet_time_matrix[i] # Get the times of the current jet
+                if len(jetTemp) > 1: # If there is a time in the current jet
+                    if jetTemp[1] <= time_sync(): # get the first time in the list and check if is earlier or equal to right now
+                        LOGGER.debug("FIIIREEE!!!  " + str(i)) #Pretty self explanitory
+                        JetController.TurnOffJet(13) #Send activation to arduino -----------------------------------------13 for testing
+                        #jet_time_matrix[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
+
+            for i in len(jet_time_matrix): #Send jet stop to arduino when time has arrived
+                jetTemp = jet_time_matrix[i]
+                if len(jetTemp) > 1:
+                    if jetTemp[1] + jetBlast <= time_sync():
+                        JetController.TurnOffJet(13) #Send deactivation to arduino -----------------------------------------13 for testing
+                        jet_time_matrix[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
 
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
