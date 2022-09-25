@@ -296,7 +296,7 @@ def run(
 
             #Calc of jet activation time if bad
             for i in range(len(det)): 
-                class_prediction = det[i, 5]
+                class_prediction = det[i, 5].item()
                 
                 xpos = det[i,0]
                 jet_index = nut_utils.GetJetIndex(xpos, colAlign)
@@ -309,8 +309,9 @@ def run(
                 time_matches = [t[time_index] for t in jet_time_matrix[jet_index] if t[time_index] >= lowBow and t[time_index] < highBow]
                 if not time_matches:
                     confidence_values = nut_utils.ConfidenceValues(0,0)
-
-                    if class_prediction == NutClasses.GOOD:
+                    #print(class_prediction)
+                    
+                    if class_prediction == 6:
                         confidence_values.Good = 1
                     else:
                         confidence_values.Bad = 1
@@ -319,14 +320,12 @@ def run(
                     jet_time_matrix[jet_index] = jet_time_matrix[jet_index] + [actTList] #add new time entry
                 else:
                     time_match = time_matches[0]
-                    print(time_match)
-                    print(jet_time_matrix)
                     activejet = jet_time_matrix[jet_index]
                     time_match_list = [jet_time_matrix_object for jet_time_matrix_object in activejet if jet_time_matrix_object[time_index] == time_match][0]
                     newjet = activejet
                     new_time_match_list = [time_match, time_match_list[confidence_values_index]]
 
-                    if class_prediction == NutClasses.GOOD:
+                    if class_prediction == 6:
                         new_time_match_list[confidence_values_index].Good += 1
                     else:
                         new_time_match_list[confidence_values_index].Bad += 1
@@ -336,7 +335,6 @@ def run(
             number_of_jets_range = range(len(jet_time_matrix))
             for i in number_of_jets_range: #Send jet start to arduino when time has arrived
                 jetTemp = jet_time_matrix[i] # Get the times of the current jet
-                # TODO: Sort by 
                 if len(jetTemp) > 1: # If there is a time in the current jet
                     if jetTemp[1][time_index] <= time_sync(): # get the first time in the list and check if is earlier or equal to right now
                         print(str(jetTemp[1][confidence_values_index]))
