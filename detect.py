@@ -107,7 +107,7 @@ def run(
     # Data Structure [[time, obj(cood_count, bad_count)]]
     time_index = 0
     confidence_values_index = 1
-    jet_time_matrix = [[0, nut_utils.ConfidenceValues(0, 0)]]*12
+    jet_time_matrix = [[[0, nut_utils.ConfidenceValues(0, 0)]]]*12
 
     #Changable Variables
     jetBlast = jet_blast_time #length of jet blast (s)
@@ -309,7 +309,7 @@ def run(
                 lastInQ = jetTemp[-1] #retrieve last activation time for jet
                 lowBow = actTime - timeWindow
                 highBow = actTime + timeWindow
-                time_matches = [t for t in jet_time_matrix[jet_index][time_index] if t >= lowBow and t < highBow]
+                time_matches = [t[time_index] for t in jet_time_matrix[jet_index] if t[time_index] >= lowBow and t[time_index] < highBow]
                 if not time_matches:
                     actTList = [actTime, nut_utils.ConfidenceValues(0,0)]
                     jet_time_matrix[jet_index] = jet_time_matrix[jet_index] + actTList #add new time entry
