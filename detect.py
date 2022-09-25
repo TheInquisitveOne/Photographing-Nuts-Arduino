@@ -31,6 +31,7 @@ import os
 import platform
 import sys
 from pathlib import Path
+from typing import Dict
 
 import numpy as np
 import pyfirmata
@@ -103,7 +104,11 @@ def run(
         source = check_file(source)  # download
 
     #Program variables:
-    jet_time_matrix = [[0]]*12
+    # Data Structure [[time, obj(cood_count, bad_count)]]
+    time_index = 0
+    confidence_values_index = 1
+    jet_time_matrix = [[0, nut_utils.ConfidenceValues(0, 0)]]*12
+
     #Changable Variables
     jetBlast = jet_blast_time #length of jet blast (s)
     speed = conveyor_speed #Coveyor speed (m/s)
@@ -288,37 +293,27 @@ def run(
             if loaded == LoadedStatus.CAMERA_LOADED:
                 loaded = LoadedStatus.CAMERA_USED
 
-                
-                
-
-
-
             #Calc of jet activation time if bad
             for i in range(len(det)): 
                 class_prediction = det[i, 5]
-                if class_prediction != NutClasses.GOOD:
-                    actTime = 0
-                    distance_to_Jet = 0
-                    lastInQ = 0
-                    xpos = det[i,0]
-
-                    jet_index = nut_utils.GetJetIndex(xpos, colAlign)
-                    distance_to_Jet = (fHeight * (1 - det[i, 1] / h)) + b2J #Calculate distance between jet and nut
-                    time_to_jet = float((distance_to_Jet / speed)) #time to activate in sec
-                    actTime = time_sync() + time_to_jet #time to activate in program time space
-                    jetTemp = jet_time_matrix[jet_index]
-                    lastInQ = jetTemp[-1] #retrieve last activation time for jet
-                    lowBow = actTime - timeWindow
-                    highBow = actTime + timeWindow
-                    time_matches = [t for t in jet_time_matrix[jet_index] if t >= lowBow and t < highBow]
-                    if not time_matches:
-                        actTList = [actTime]
-                        jet_time_matrix[jet_index] = jet_time_matrix[jet_index] + actTList #add new time entry
-
-                    #else: TODO 
-
-                    
-
+                
+                actTime = 0
+                distance_to_Jet = 0
+                lastInQ = 0
+                xpos = det[i,0]
+                jet_index = nut_utils.GetJetIndex(xpos, colAlign)
+                distance_to_Jet = (fHeight * (1 - det[i, 1] / h)) + b2J #Calculate distance between jet and nut
+                time_to_jet = float((distance_to_Jet / speed)) #time to activate in sec
+                actTime = time_sync() + time_to_jet #time to activate in program time space
+                jetTemp = jet_time_matrix[jet_index]
+                lastInQ = jetTemp[-1] #retrieve last activation time for jet
+                lowBow = actTime - timeWindow
+                highBow = actTime + timeWindow
+                time_matches = [t for t in jet_time_matrix[jet_index][time_index] if t >= lowBow and t < highBow]
+                if not time_matches:
+                    actTList = [actTime, nut_utils.ConfidenceValues(0,0)]
+                    jet_time_matrix[jet_index] = jet_time_matrix[jet_index] + actTList #add new time entry
+                #else: TODO 
 
                     
 

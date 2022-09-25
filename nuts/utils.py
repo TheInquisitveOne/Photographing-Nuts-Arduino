@@ -22,6 +22,14 @@ class JetController:
         except Exception:
             LOGGER.error(f"There was an error turning on jet {index}")
 
+class ConfidenceValues:
+    def __init__(self, good, bad) -> None:
+        self.Good = good
+        self.Bad = bad
+
+    def __str__(self) -> str:
+        return f"Good: {self.Good}, Bad: {self.Bad}"
+    
 
 def GetJetIndex(xpos, colAlign):
     # Returns the index of the jet in who's path the nut falls.
