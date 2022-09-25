@@ -1,0 +1,8 @@
+train: ../yolov5/data/images/training/
+val: ../yolov5/data/images/validation/
+
+# number of classes
+nc: 2
+
+# class names
+names: ['with mask', 'without mask']

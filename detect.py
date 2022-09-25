@@ -25,10 +25,16 @@ Usage - formats:
 """
 
 import argparse
+from ast import Try
 import os
 import platform
 import sys
 from pathlib import Path
+
+import numpy as np
+import pyfirmata
+import time
+#import cv2 as cv
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -52,7 +58,7 @@ def run(
         weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         source=ROOT / 'data/images',  # file/dir/URL/glob, 0 for webcam
         data=ROOT / 'data/coco128.yaml',  # dataset.yaml path
-        imgsz=(640, 640),  # inference size (height, width)
+        imgsz=(720, 1280),  # inference size (height, width)
         conf_thres=0.25,  # confidence threshold
         iou_thres=0.45,  # NMS IOU threshold
         max_det=1000,  # maximum detections per image
@@ -61,7 +67,7 @@ def run(
         save_txt=False,  # save results to *.txt
         save_conf=False,  # save confidences in --save-txt labels
         save_crop=False,  # save cropped prediction boxes
-        nosave=False,  # do not save images/videos
+        nosave=True,  # do not save images/videos
         classes=None,  # filter by class: --class 0, or --class 0 2 3
         agnostic_nms=False,  # class-agnostic NMS
         augment=False,  # augmented inference
@@ -100,6 +106,8 @@ def run(
         cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadStreams(source, img_size=imgsz, stride=stride, auto=pt)
         bs = len(dataset)  # batch_size
+        loaded=0
+        
     else:
         dataset = LoadImages(source, img_size=imgsz, stride=stride, auto=pt)
         bs = 1  # batch_size
@@ -110,11 +118,57 @@ def run(
     seen, windows, dt = 0, [], [0.0, 0.0, 0.0]
     for path, im, im0s, vid_cap, s in dataset:
         t1 = time_sync()
+
+        
+        #Distorion correction
+        distort=1 #Enable distortion correction
+        if distort==1:
+            mtx = np.array([[819.83614964,0.,641.69044164],[0.,819.09003266,341.81366636],[0.,0.,1.]])
+            dist = np.array([[-0.42673426,0.19252523,-0.00092188,-0.00148215,0.04018296]])
+            
+            if loaded==0:
+                h,  w = im0s[0].shape[:2]
+                newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w,h), 1, (w,h))
+                loaded = 1
+                
+
+            x, y, w, h = roi
+            im1=im[0,0]
+            x1, y1, w1, h1 = roi
+            x1, y1, w1, h1 = x, y, w, h
+
+            for i in [0,1,2]:
+                
+                h1, w1 = im.shape[2:]
+                im1 = im[0,i]
+                im1 = im1[12:h1-12, 0:w1]
+                im1 = cv2.resize(im1, (1280,720))
+                dst = cv2.undistort(im1, mtx, dist, None, newcameramtx)
+                x, y, w, h = roi
+                dst = dst[y:y+h, x:x+w]
+                dst = cv2.resize(dst, (640,360))
+                for j in range(360):
+                    im[0,i,j+12]=dst[j]
+
+            
+            dst = cv2.undistort(im0s[0], mtx, dist, None, newcameramtx)
+            x, y, w, h = roi
+            dst = dst[y:y+h, x:x+w]
+            im0s[0]=dst
+            
+        
+        ims = im[0,0]
+        #cv2.imshow('im',im[0,0])
+        #cv2.waitKey(1000)
+        
+
+
         im = torch.from_numpy(im).to(device)
         im = im.half() if model.fp16 else im.float()  # uint8 to fp16/32
         im /= 255  # 0 - 255 to 0.0 - 1.0
         if len(im.shape) == 3:
             im = im[None]  # expand for batch dim
+            
         t2 = time_sync()
         dt[0] += t2 - t1
 
@@ -201,11 +255,82 @@ def run(
                     vid_writer[i].write(im0)
 
         # Print time (inference-only)
-        LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
+        #LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
+
+        #CUSTOM CODE-----------------------------------------------------------------------------------------------------------
+        if loaded==1:
+            loaded=2
+
+            try:
+                board = pyfirmata.Arduino('/dev/ttyACM0')
+                print("Arduino found")
+            except:
+                print("Arduino not found")
+
+
+            #Changable Variables
+            speed = 0.167 #Coveyor speed (m/s)
+            b2J = 0.4 #bottom of image to jet disatance (m)
+            fHeight = 0.25 #frame height (m)
+            colAlign = [125, 210, 310, 405, 505, 600, 700, 795, 890, 985, 1090] #Alignment of coloumns for jets (px)
+            timeWindow = 5/1000 #time deviation window for jet activation (ms)
+            jetBlast = 0.1 #length of jet blast (s)
+
+            #Program variables:
+            jetTime = [[0]]*12
+
+
+        for i in range(len(det)): #Calc of jet activation time if bad
+            if det[i,5] != 6: #If Bad nut
+                placed=0
+                j=0
+                actTime= 0
+                d2Jet = 0
+                lastInQ = 0
+                while placed==0 and j<11: #Check for which coloumn
+                    if det[i,0] < colAlign[j]:
+                        placed=1
+                        d2Jet = (fHeight*(1-det[i,1]/h)) + b2J #Calculate distance between jet and nut
+                        actTime = float((d2Jet/speed)) #time to activate in sec
+                        actTime = time_sync() + actTime #time to activate in program time space
+                        jetTemp = jetTime[j]
+                        lastInQ = jetTemp[-1] #retrieve last activation time for jet
+                        if actTime - lastInQ > timeWindow: #Check if within time window
+                            actTList = [actTime]
+                            jetTime[j] = jetTime[j] + actTList #add new time entry
+
+
+                    j+=1           
+
+
+
+        
+        for i in range(12): #Send jet start to arduino when time has arrived
+            jetTemp = jetTime[i]
+            if len(jetTemp)>1:
+                if jetTemp[1] <= time_sync():
+                    print("FIIIREEE!!!  " + str(i)) #Pretty self explanitory
+                    board.digital[13].write(1) #Send activation to arduino -----------------------------------------13 for testing
+                    #jetTime[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
+
+
+        for i in range(12): #Send jet stop to arduino when time has arrived
+            jetTemp = jetTime[i]
+            if len(jetTemp)>1:
+                if jetTemp[1] + jetBlast <= time_sync():
+                    board.digital[13].write(0) #Send deactivation to arduino -----------------------------------------13 for testing
+                    jetTime[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
+
+        
+
+
+
+        #CUSTOM CODE-----------------------------------------------------------------------------------------------------------
 
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
-    LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
+    #LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
+    #LOGGER.info(f'Speed: %.1fms pre-dddddprocess, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *xyxy)}' % xyxy)
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}{s}")
