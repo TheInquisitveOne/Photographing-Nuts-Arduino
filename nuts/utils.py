@@ -2,8 +2,14 @@ import pyfirmata
 from utils.general import LOGGER
 
 class JetController:
-    Board = pyfirmata.Arduino('/dev/ttyACM0')
+    Board = False
     
+    def __init__(self) -> None:
+        try:
+            self.Board = pyfirmata.Arduino('/dev/ttyACM0')
+        except:
+            LOGGER.error(f"There was an error connecting to the Arduino")
+
     def TurnOnJet(self, index):
         try:
             self.Board.digital[index].write(1)

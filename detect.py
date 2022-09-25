@@ -113,6 +113,7 @@ def run(
 
     # TODO: Extract this from a filepath
     colAlign = [125, 210, 310, 405, 505, 600, 700, 795, 890, 985, 1090] #Alignment of coloumns for jets (px)
+    jet_controller = JetController()
 
     # Directories
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
@@ -317,14 +318,14 @@ def run(
                 if len(jetTemp) > 1: # If there is a time in the current jet
                     if jetTemp[1] <= time_sync(): # get the first time in the list and check if is earlier or equal to right now
                         LOGGER.debug("FIIIREEE!!!  " + str(i)) #Pretty self explanitory
-                        JetController.TurnOnJet(13) #Send activation to arduino -----------------------------------------13 for testing
+                        jet_controller.TurnOnJet(13) #Send activation to arduino -----------------------------------------13 for testing
                         #jet_time_matrix[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
 
             for i in number_of_jets_range: #Send jet stop to arduino when time has arrived
                 jetTemp = jet_time_matrix[i]
                 if len(jetTemp) > 1:
                     if jetTemp[1] + jetBlast <= time_sync():
-                        JetController.TurnOffJet(13) #Send deactivation to arduino -----------------------------------------13 for testing
+                        jet_controller.TurnOffJet(13) #Send deactivation to arduino -----------------------------------------13 for testing
                         jet_time_matrix[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
 
     # Print results
