@@ -311,7 +311,8 @@ def run(
                         actTList = [actTime]
                         jet_time_matrix[jet_index] = jet_time_matrix[jet_index] + actTList #add new time entry
 
-            for i in len(jet_time_matrix): #Send jet start to arduino when time has arrived
+            number_of_jets_range = range(len(jet_time_matrix))
+            for i in number_of_jets_range: #Send jet start to arduino when time has arrived
                 jetTemp = jet_time_matrix[i] # Get the times of the current jet
                 if len(jetTemp) > 1: # If there is a time in the current jet
                     if jetTemp[1] <= time_sync(): # get the first time in the list and check if is earlier or equal to right now
@@ -319,7 +320,7 @@ def run(
                         JetController.TurnOffJet(13) #Send activation to arduino -----------------------------------------13 for testing
                         #jet_time_matrix[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
 
-            for i in len(jet_time_matrix): #Send jet stop to arduino when time has arrived
+            for i in number_of_jets_range: #Send jet stop to arduino when time has arrived
                 jetTemp = jet_time_matrix[i]
                 if len(jetTemp) > 1:
                     if jetTemp[1] + jetBlast <= time_sync():
