@@ -158,8 +158,8 @@ def run(
     
                 x, y, w, h = roi
                 im1=im[0,0]
-                x1, y1, w1, h1 = roi
-                x1, y1, w1, h1 = x, y, w, h
+                _, _, w1, h1 = roi
+                _, _, w1, h1 = x, y, w, h
     
                 for i in [0,1,2]:
                 
