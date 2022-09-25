@@ -27,6 +27,7 @@ Usage - formats:
 import argparse
 from ast import Try
 from asyncio.log import logger
+from multiprocessing.reduction import duplicate
 import os
 import platform
 import sys
@@ -297,31 +298,43 @@ def run(
             for i in range(len(det)): 
                 class_prediction = det[i, 5]
                 
-                actTime = 0
-                distance_to_Jet = 0
-                lastInQ = 0
                 xpos = det[i,0]
                 jet_index = nut_utils.GetJetIndex(xpos, colAlign)
                 distance_to_Jet = (fHeight * (1 - det[i, 1] / h)) + b2J #Calculate distance between jet and nut
                 time_to_jet = float((distance_to_Jet / speed)) #time to activate in sec
                 actTime = time_sync() + time_to_jet #time to activate in program time space
                 jetTemp = jet_time_matrix[jet_index]
-                lastInQ = jetTemp[-1] #retrieve last activation time for jet
                 lowBow = actTime - timeWindow
                 highBow = actTime + timeWindow
                 time_matches = [t[time_index] for t in jet_time_matrix[jet_index] if t[time_index] >= lowBow and t[time_index] < highBow]
                 if not time_matches:
-                    actTList = [actTime, nut_utils.ConfidenceValues(0,0)]
-                    jet_time_matrix[jet_index] = jet_time_matrix[jet_index] + actTList #add new time entry
-                #else: TODO 
+                    confidence_values = nut_utils.ConfidenceValues(0,0)
 
-                    
+                    if class_prediction == NutClasses.GOOD:
+                        confidence_values.Good = 1
+                    else:
+                        confidence_values.Bad = 1
+
+                    actTList = [actTime, confidence_values]
+                    jet_time_matrix[jet_index] = jet_time_matrix[jet_index] + actTList #add new time entry
+                else:
+                    time_match = time_matches[0]
+                    time_match_list = [jet_time_matrix_object for jet_time_matrix_object in jet_time_matrix if jet_time_matrix_object[time_index] == time_match][0]
+                    new_time_match_list = [time_match, time_match_list[confidence_values_index]]
+
+                    if class_prediction == NutClasses.GOOD:
+                        new_time_match_list[confidence_values_index].Good += 1
+                    else:
+                        new_time_match_list[confidence_values_index].Bad += 1
+
+                    jet_time_matrix[time_match_list] = new_time_match_list
 
             number_of_jets_range = range(len(jet_time_matrix))
             for i in number_of_jets_range: #Send jet start to arduino when time has arrived
                 jetTemp = jet_time_matrix[i] # Get the times of the current jet
                 if len(jetTemp) > 1: # If there is a time in the current jet
                     if jetTemp[1][time_index] <= time_sync(): # get the first time in the list and check if is earlier or equal to right now
+                        print(str(jetTemp[1][confidence_values_index]))
                         LOGGER.debug("FIIIREEE!!!  " + str(i)) #Pretty self explanitory
                         jet_controller.TurnOnJet(13) #Send activation to arduino -----------------------------------------13 for testing
                         #jet_time_matrix[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
