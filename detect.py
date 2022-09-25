@@ -321,7 +321,7 @@ def run(
             for i in number_of_jets_range: #Send jet start to arduino when time has arrived
                 jetTemp = jet_time_matrix[i] # Get the times of the current jet
                 if len(jetTemp) > 1: # If there is a time in the current jet
-                    if jetTemp[1] <= time_sync(): # get the first time in the list and check if is earlier or equal to right now
+                    if jetTemp[1][time_index] <= time_sync(): # get the first time in the list and check if is earlier or equal to right now
                         LOGGER.debug("FIIIREEE!!!  " + str(i)) #Pretty self explanitory
                         jet_controller.TurnOnJet(13) #Send activation to arduino -----------------------------------------13 for testing
                         #jet_time_matrix[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
@@ -329,7 +329,7 @@ def run(
             for i in number_of_jets_range: #Send jet stop to arduino when time has arrived
                 jetTemp = jet_time_matrix[i]
                 if len(jetTemp) > 1:
-                    if jetTemp[1] + jetBlast <= time_sync():
+                    if jetTemp[1][time_index] + jetBlast <= time_sync():
                         jet_controller.TurnOffJet(13) #Send deactivation to arduino -----------------------------------------13 for testing
                         jet_time_matrix[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
 
