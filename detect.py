@@ -281,8 +281,6 @@ def run(
         for i in range(len(det)): 
             class_prediction = det[i, 5]
             if class_prediction != NutClasses.GOOD:
-                # placed = 0
-                # j = 0
                 actTime = 0
                 distance_to_Jet = 0
                 lastInQ = 0
@@ -298,27 +296,10 @@ def run(
                     actTList = [actTime]
                     jetTime[jet_index] = jetTime[jet_index] + actTList #add new time entry
 
-                # while placed == 0 and j < 11: #Check for which coloumn
-                #     if det[i,0] < colAlign[j]:
-                #         placed = 1
-                #         distance_to_Jet = (fHeight*(1-det[i,1]/h)) + b2J #Calculate distance between jet and nut
-                #         actTime = float((distance_to_Jet/speed)) #time to activate in sec
-                #         actTime = time_sync() + actTime #time to activate in program time space
-                #         jetTemp = jetTime[j]
-                #         lastInQ = jetTemp[-1] #retrieve last activation time for jet
-                #         if actTime - lastInQ > timeWindow: #Check if within time window
-                #             actTList = [actTime]
-                #             jetTime[j] = jetTime[j] + actTList #add new time entry
-
-
-                    # j += 1
-
-
-
         for i in len(jetTime): #Send jet start to arduino when time has arrived
-            jetTemp = jetTime[i]
-            if len(jetTemp) > 1:
-                if jetTemp[1] <= time_sync():
+            jetTemp = jetTime[i] # Get the times of the current jet
+            if len(jetTemp) > 1: # If there is a time in the current jet
+                if jetTemp[1] <= time_sync(): # get the first time in the list and check if is earlier or equal to right now
                     print("FIIIREEE!!!  " + str(i)) #Pretty self explanitory
                     JetController.TurnOffJet(13) #Send activation to arduino -----------------------------------------13 for testing
                     #jetTime[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
