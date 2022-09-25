@@ -308,9 +308,19 @@ def run(
                     actTime = time_sync() + time_to_jet #time to activate in program time space
                     jetTemp = jet_time_matrix[jet_index]
                     lastInQ = jetTemp[-1] #retrieve last activation time for jet
-                    if actTime - lastInQ > timeWindow: #Check if within time window
+                    lowBow = actTime - timeWindow
+                    highBow = actTime + timeWindow
+                    time_matches = [t for t in jet_time_matrix[jet_index] if t >= lowBow and t < highBow]
+                    if not time_matches:
                         actTList = [actTime]
                         jet_time_matrix[jet_index] = jet_time_matrix[jet_index] + actTList #add new time entry
+
+                    #else: TODO 
+
+                    
+
+
+                    
 
             number_of_jets_range = range(len(jet_time_matrix))
             for i in number_of_jets_range: #Send jet start to arduino when time has arrived
