@@ -26,6 +26,7 @@ Usage - formats:
 
 import argparse
 from ast import Try
+from asyncio.log import logger
 import os
 import platform
 import sys
@@ -35,6 +36,9 @@ import numpy as np
 import pyfirmata
 import time
 #import cv2 as cv
+from nuts.enums import LoadedStatus, NutClasses
+from nuts.utils import JetController
+import nuts.utils as nut_utils
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -51,6 +55,7 @@ from utils.general import (LOGGER, check_file, check_img_size, check_imshow, che
                            increment_path, non_max_suppression, print_args, scale_coords, strip_optimizer, xyxy2xywh)
 from utils.plots import Annotator, colors, save_one_box
 from utils.torch_utils import select_device, time_sync
+
 
 
 @torch.no_grad()
@@ -106,8 +111,8 @@ def run(
         cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadStreams(source, img_size=imgsz, stride=stride, auto=pt)
         bs = len(dataset)  # batch_size
-        loaded=0
-        
+        loaded=LoadedStatus.NONE
+
     else:
         dataset = LoadImages(source, img_size=imgsz, stride=stride, auto=pt)
         bs = 1  # batch_size
@@ -119,18 +124,18 @@ def run(
     for path, im, im0s, vid_cap, s in dataset:
         t1 = time_sync()
 
-        
+
         #Distorion correction
-        distort=1 #Enable distortion correction
-        if distort==1:
+        distort=True #Enable distortion correction
+        if distort:
             mtx = np.array([[819.83614964,0.,641.69044164],[0.,819.09003266,341.81366636],[0.,0.,1.]])
             dist = np.array([[-0.42673426,0.19252523,-0.00092188,-0.00148215,0.04018296]])
-            
-            if loaded==0:
+
+            if loaded==LoadedStatus.NONE:
                 h,  w = im0s[0].shape[:2]
                 newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w,h), 1, (w,h))
-                loaded = 1
-                
+                loaded = LoadedStatus.CAMERA_LOADED
+
 
             x, y, w, h = roi
             im1=im[0,0]
@@ -138,7 +143,7 @@ def run(
             x1, y1, w1, h1 = x, y, w, h
 
             for i in [0,1,2]:
-                
+
                 h1, w1 = im.shape[2:]
                 im1 = im[0,i]
                 im1 = im1[12:h1-12, 0:w1]
@@ -150,17 +155,17 @@ def run(
                 for j in range(360):
                     im[0,i,j+12]=dst[j]
 
-            
+
             dst = cv2.undistort(im0s[0], mtx, dist, None, newcameramtx)
             x, y, w, h = roi
             dst = dst[y:y+h, x:x+w]
             im0s[0]=dst
-            
-        
+
+
         ims = im[0,0]
         #cv2.imshow('im',im[0,0])
         #cv2.waitKey(1000)
-        
+
 
 
         im = torch.from_numpy(im).to(device)
@@ -168,7 +173,7 @@ def run(
         im /= 255  # 0 - 255 to 0.0 - 1.0
         if len(im.shape) == 3:
             im = im[None]  # expand for batch dim
-            
+
         t2 = time_sync()
         dt[0] += t2 - t1
 
@@ -258,15 +263,8 @@ def run(
         #LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
 
         #CUSTOM CODE-----------------------------------------------------------------------------------------------------------
-        if loaded==1:
-            loaded=2
-
-            try:
-                board = pyfirmata.Arduino('/dev/ttyACM0')
-                print("Arduino found")
-            except:
-                print("Arduino not found")
-
+        if loaded == LoadedStatus.CAMERA_LOADED:
+            loaded = LoadedStatus.CAMERA_USED
 
             #Changable Variables
             speed = 0.167 #Coveyor speed (m/s)
@@ -279,53 +277,61 @@ def run(
             #Program variables:
             jetTime = [[0]]*12
 
-
-        for i in range(len(det)): #Calc of jet activation time if bad
-            if det[i,5] != 6: #If Bad nut
-                placed=0
-                j=0
-                actTime= 0
-                d2Jet = 0
+        #Calc of jet activation time if bad
+        for i in range(len(det)): 
+            class_prediction = det[i, 5]
+            if class_prediction != NutClasses.GOOD:
+                # placed = 0
+                # j = 0
+                actTime = 0
+                distance_to_Jet = 0
                 lastInQ = 0
-                while placed==0 and j<11: #Check for which coloumn
-                    if det[i,0] < colAlign[j]:
-                        placed=1
-                        d2Jet = (fHeight*(1-det[i,1]/h)) + b2J #Calculate distance between jet and nut
-                        actTime = float((d2Jet/speed)) #time to activate in sec
-                        actTime = time_sync() + actTime #time to activate in program time space
-                        jetTemp = jetTime[j]
-                        lastInQ = jetTemp[-1] #retrieve last activation time for jet
-                        if actTime - lastInQ > timeWindow: #Check if within time window
-                            actTList = [actTime]
-                            jetTime[j] = jetTime[j] + actTList #add new time entry
+                xpos = det[i,0]
+
+                jet_index = nut_utils.GetJetIndex(xpos, colAlign)
+                distance_to_Jet = (fHeight * (1 - det[i, 1] / h)) + b2J #Calculate distance between jet and nut
+                time_to_jet = float((distance_to_Jet / speed)) #time to activate in sec
+                actTime = time_sync() + time_to_jet #time to activate in program time space
+                jetTemp = jetTime[jet_index]
+                lastInQ = jetTemp[-1] #retrieve last activation time for jet
+                if actTime - lastInQ > timeWindow: #Check if within time window
+                    actTList = [actTime]
+                    jetTime[jet_index] = jetTime[jet_index] + actTList #add new time entry
+
+                # while placed == 0 and j < 11: #Check for which coloumn
+                #     if det[i,0] < colAlign[j]:
+                #         placed = 1
+                #         distance_to_Jet = (fHeight*(1-det[i,1]/h)) + b2J #Calculate distance between jet and nut
+                #         actTime = float((distance_to_Jet/speed)) #time to activate in sec
+                #         actTime = time_sync() + actTime #time to activate in program time space
+                #         jetTemp = jetTime[j]
+                #         lastInQ = jetTemp[-1] #retrieve last activation time for jet
+                #         if actTime - lastInQ > timeWindow: #Check if within time window
+                #             actTList = [actTime]
+                #             jetTime[j] = jetTime[j] + actTList #add new time entry
 
 
-                    j+=1           
+                    # j += 1
 
 
 
-        
-        for i in range(12): #Send jet start to arduino when time has arrived
+        for i in len(jetTime): #Send jet start to arduino when time has arrived
             jetTemp = jetTime[i]
-            if len(jetTemp)>1:
+            if len(jetTemp) > 1:
                 if jetTemp[1] <= time_sync():
                     print("FIIIREEE!!!  " + str(i)) #Pretty self explanitory
-                    board.digital[13].write(1) #Send activation to arduino -----------------------------------------13 for testing
+                    JetController.TurnOffJet(13) #Send activation to arduino -----------------------------------------13 for testing
                     #jetTime[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
 
-
-        for i in range(12): #Send jet stop to arduino when time has arrived
+        for i in len(jetTime): #Send jet stop to arduino when time has arrived
             jetTemp = jetTime[i]
-            if len(jetTemp)>1:
+            if len(jetTemp) > 1:
                 if jetTemp[1] + jetBlast <= time_sync():
-                    board.digital[13].write(0) #Send deactivation to arduino -----------------------------------------13 for testing
+                    JetController.TurnOffJet(13) #Send deactivation to arduino -----------------------------------------13 for testing
                     jetTime[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
 
-        
 
-
-
-        #CUSTOM CODE-----------------------------------------------------------------------------------------------------------
+    #CUSTOM CODE-----------------------------------------------------------------------------------------------------------
 
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
