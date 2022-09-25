@@ -27,7 +27,7 @@ Usage - formats:
 import argparse
 from ast import Try
 from asyncio.log import logger
-from multiprocessing.reduction import duplicate
+#from multiprocessing.reduction import duplicate
 import os
 import platform
 import sys
@@ -93,7 +93,7 @@ def run(
         conveyor_speed=0.167, # Coveyor speed (m/s)
         bottom_to_jet=0.4, #bottom of image to jet disatance (m)
         frame_Height=0.25, #frame height (m)
-        time_window=0.005, #time deviation window for jet activation (ms)
+        time_window=0.5, #time deviation window for jet activation (ms)
         col_align_xpos_file='' #file destination containing Alignment of coloumns for jets (px)
 ):
     source = str(source)
@@ -316,10 +316,14 @@ def run(
                         confidence_values.Bad = 1
 
                     actTList = [actTime, confidence_values]
-                    jet_time_matrix[jet_index] = jet_time_matrix[jet_index] + actTList #add new time entry
+                    jet_time_matrix[jet_index] = jet_time_matrix[jet_index] + [actTList] #add new time entry
                 else:
                     time_match = time_matches[0]
-                    time_match_list = [jet_time_matrix_object for jet_time_matrix_object in jet_time_matrix if jet_time_matrix_object[time_index] == time_match][0]
+                    print(time_match)
+                    print(jet_time_matrix)
+                    activejet = jet_time_matrix[jet_index]
+                    time_match_list = [jet_time_matrix_object for jet_time_matrix_object in activejet if jet_time_matrix_object[time_index] == time_match][0]
+                    newjet = activejet
                     new_time_match_list = [time_match, time_match_list[confidence_values_index]]
 
                     if class_prediction == NutClasses.GOOD:
@@ -327,7 +331,8 @@ def run(
                     else:
                         new_time_match_list[confidence_values_index].Bad += 1
 
-                    jet_time_matrix[time_match_list] = new_time_match_list
+                    newjet[time_match_list] = new_time_match_list
+                    jet_time_matrix[jet_index] = newjet
 
             number_of_jets_range = range(len(jet_time_matrix))
             for i in number_of_jets_range: #Send jet start to arduino when time has arrived
@@ -390,7 +395,7 @@ def parse_opt():
     parser.add_argument('--conveyor-speed', type=float, default=0.167, help='Coveyor speed (m/s)')
     parser.add_argument('--bottom-to-jet', type=float, default=0.4, help='bottom of image to jet disatance (m)')
     parser.add_argument('--frame-Height', type=float, default=0.25, help='frame height (m)')
-    parser.add_argument('--time-window', type=float, default=0.005, help='time deviation window for jet activation (ms)')
+    parser.add_argument('--time-window', type=float, default=0.5, help='time deviation window for jet activation (ms)')
     parser.add_argument('--col-align-xpos-file', type=str, default=ROOT / 'data/xalignpos.yaml', help='file destination containing Alignment of coloumns for jets (px)')
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
