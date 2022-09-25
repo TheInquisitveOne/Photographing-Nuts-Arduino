@@ -331,12 +331,12 @@ def run(
                     else:
                         new_time_match_list[confidence_values_index].Bad += 1
 
-                    newjet[time_match_list] = new_time_match_list
-                    jet_time_matrix[jet_index] = newjet
+                    jet_time_matrix[jet_index] = [jet_time_matrix_object  if jet_time_matrix_object[time_index] != time_match else new_time_match_list for jet_time_matrix_object in jet_time_matrix[jet_index] ]
 
             number_of_jets_range = range(len(jet_time_matrix))
             for i in number_of_jets_range: #Send jet start to arduino when time has arrived
                 jetTemp = jet_time_matrix[i] # Get the times of the current jet
+                # TODO: Sort by 
                 if len(jetTemp) > 1: # If there is a time in the current jet
                     if jetTemp[1][time_index] <= time_sync(): # get the first time in the list and check if is earlier or equal to right now
                         print(str(jetTemp[1][confidence_values_index]))
