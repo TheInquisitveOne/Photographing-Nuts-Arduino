@@ -2,7 +2,7 @@ import pyfirmata
 from utils.general import LOGGER
 
 class JetController:
-    Board = self.Board = pyfirmata.Arduino('/dev/ttyACM0')
+    Board = pyfirmata.Arduino('/dev/ttyACM0')
     
     def TurnOnJet(self, index):
         try:
