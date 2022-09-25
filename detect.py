@@ -317,7 +317,7 @@ def run(
                 if len(jetTemp) > 1: # If there is a time in the current jet
                     if jetTemp[1] <= time_sync(): # get the first time in the list and check if is earlier or equal to right now
                         LOGGER.debug("FIIIREEE!!!  " + str(i)) #Pretty self explanitory
-                        JetController.TurnOffJet(13) #Send activation to arduino -----------------------------------------13 for testing
+                        JetController.TurnOnJet(13) #Send activation to arduino -----------------------------------------13 for testing
                         #jet_time_matrix[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
 
             for i in number_of_jets_range: #Send jet stop to arduino when time has arrived
