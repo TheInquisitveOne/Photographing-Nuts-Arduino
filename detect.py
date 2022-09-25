@@ -86,12 +86,12 @@ def run(
         hide_conf=False,  # hide confidences
         half=False,  # use FP16 half-precision inference
         dnn=False,  # use OpenCV DNN for ONNX inference
-        nut_tracking=True, # Execute nut tracking
+        nut_tracking=True, # Execute nut tracking TODO: Fix feature flag
         jet_blast_time=0.1, #length of jet blast (s)
         conveyor_speed=0.167, # Coveyor speed (m/s)
         bottom_to_jet=0.4, #bottom of image to jet disatance (m)
         frame_Height=0.25, #frame height (m)
-        time_window=5/1000, #time deviation window for jet activation (ms)
+        time_window=0.005, #time deviation window for jet activation (ms)
         col_align_xpos_file='' #file destination containing Alignment of coloumns for jets (px)
 ):
     source = str(source)
@@ -123,6 +123,7 @@ def run(
     model = DetectMultiBackend(weights, device=device, dnn=dnn, data=data, fp16=half)
     stride, names, pt = model.stride, model.names, model.pt
     imgsz = check_img_size(imgsz, s=stride)  # check image size
+    loaded=LoadedStatus.NONE
 
     # Dataloader
     if webcam:
@@ -130,7 +131,6 @@ def run(
         cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadStreams(source, img_size=imgsz, stride=stride, auto=pt)
         bs = len(dataset)  # batch_size
-        loaded=LoadedStatus.NONE
 
     else:
         dataset = LoadImages(source, img_size=imgsz, stride=stride, auto=pt)
@@ -365,6 +365,13 @@ def parse_opt():
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
+    parser.add_argument('--nut-tracking', default=True, action='store_true', help='Execute nut tracking')
+    parser.add_argument('--jet-blast_time', type=float, default=0.1, help='length of jet blast (s)')
+    parser.add_argument('--conveyor-speed', type=float, default=0.167, help='Coveyor speed (m/s)')
+    parser.add_argument('--bottom-to-jet', type=float, default=0.4, help='bottom of image to jet disatance (m)')
+    parser.add_argument('--frame-Height', type=float, default=0.25, help='frame height (m)')
+    parser.add_argument('--time-window', type=float, default=0.005, help='time deviation window for jet activation (ms)')
+    parser.add_argument('--col-align-xpos-file', type=str, default=ROOT / 'data/xalignpos.yaml', help='file destination containing Alignment of coloumns for jets (px)')
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     print_args(vars(opt))
