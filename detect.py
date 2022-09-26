@@ -297,7 +297,6 @@ def run(
             #Calc of jet activation time if bad
             for i in range(len(det)): 
                 class_prediction = det[i, 5].item()
-                
                 xpos = det[i,0]
                 jet_index = nut_utils.GetJetIndex(xpos, colAlign)
                 distance_to_Jet = (fHeight * (1 - det[i, 1] / h)) + b2J #Calculate distance between jet and nut
@@ -337,9 +336,13 @@ def run(
                 jetTemp = jet_time_matrix[i] # Get the times of the current jet
                 if len(jetTemp) > 1: # If there is a time in the current jet
                     if jetTemp[1][time_index] <= time_sync(): # get the first time in the list and check if is earlier or equal to right now
-                        print(str(jetTemp[1][confidence_values_index]))
+                        if i == 4:
+                            print(str(jetTemp[1][confidence_values_index]))
+                            #print(jetTemp)
                         LOGGER.debug("FIIIREEE!!!  " + str(i)) #Pretty self explanitory
-                        jet_controller.TurnOnJet(13) #Send activation to arduino -----------------------------------------13 for testing
+                        if jetTemp[1][confidence_values_index].Good != 0 and jetTemp[1][confidence_values_index].Bad != 0: #if there is a mix of good and bad predictions
+                            if jetTemp[1][confidence_values_index].Bad/jetTemp[1][confidence_values_index].Good > 0.1:  #if more than 10% of predictions are bad
+                                jet_controller.TurnOnJet(13) #Send activation to arduino -----------------------------------------13 for testing
                         #jet_time_matrix[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
 
             for i in number_of_jets_range: #Send jet stop to arduino when time has arrived
@@ -348,6 +351,10 @@ def run(
                     if jetTemp[1][time_index] + jetBlast <= time_sync():
                         jet_controller.TurnOffJet(13) #Send deactivation to arduino -----------------------------------------13 for testing
                         jet_time_matrix[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
+
+
+    
+
 
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
