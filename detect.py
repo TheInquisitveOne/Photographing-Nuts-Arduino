@@ -340,10 +340,19 @@ def run(
                             print(str(jetTemp[1][confidence_values_index]))
                             #print(jetTemp)
                         LOGGER.debug("FIIIREEE!!!  " + str(i)) #Pretty self explanitory
-                        if jetTemp[1][confidence_values_index].Good != 0 and jetTemp[1][confidence_values_index].Bad != 0: #if there is a mix of good and bad predictions
-                            if jetTemp[1][confidence_values_index].Bad/jetTemp[1][confidence_values_index].Good > 0.1:  #if more than 10% of predictions are bad
+
+                        if jetTemp[1][confidence_values_index].Good != 0 and jetTemp[1][confidence_values_index].Bad != 0: #if there is a mix of good and bad predictions for a jet time slot
+
+                            if jetTemp[1][confidence_values_index].Bad/jetTemp[1][confidence_values_index].Good > 0.1 and jetTemp[1][confidence_values_index].Bad > 1:  #if more than 10% of predictions are bad
+
                                 jet_controller.TurnOnJet(13) #Send activation to arduino -----------------------------------------13 for testing
-                        #jet_time_matrix[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
+
+
+
+                        elif jetTemp[1][confidence_values_index].Bad > 1: #if there is more than one bad prediction for a jet time slot
+                            
+                                jet_controller.TurnOnJet(13) #Send activation to arduino -----------------------------------------13 for testing
+
 
             for i in number_of_jets_range: #Send jet stop to arduino when time has arrived
                 jetTemp = jet_time_matrix[i]
