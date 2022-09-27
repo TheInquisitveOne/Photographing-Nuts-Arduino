@@ -32,7 +32,9 @@ import os
 import platform
 import sys
 from pathlib import Path
+from turtle import goto
 from typing import Dict
+from typing_extensions import get_overloads
 
 import numpy as np
 import pyfirmata
@@ -84,8 +86,8 @@ def run(
         name='exp',  # save results to project/name
         exist_ok=False,  # existing project/name ok, do not increment
         line_thickness=3,  # bounding box thickness (pixels)
-        hide_labels=False,  # hide labels
-        hide_conf=False,  # hide confidences
+        hide_labels=True,  # hide labels
+        hide_conf=True,  # hide confidences
         half=False,  # use FP16 half-precision inference
         dnn=False,  # use OpenCV DNN for ONNX inference
         nut_tracking=True, # Execute nut tracking TODO: Fix feature flag
@@ -118,7 +120,11 @@ def run(
     timeWindow = time_window #time deviation window for jet activation (ms)
 
     # TODO: Extract this from a filepath
-    colAlign = [125, 210, 310, 405, 505, 600, 700, 795, 890, 985, 1090] #Alignment of coloumns for jets (px)
+    #colAlign = [125, 210, 310, 405, 505, 600, 700, 795, 890, 985, 1090] #Alignment of coloumns for jets (px)
+    colAlign = [103,207,310,413,517,620,723,827,930,1033,1137] #Alignment of coloumns for jets (px)
+    goodCount = 0
+    badCount = 0
+
     jet_controller = JetController()
 
     # Directories
@@ -261,9 +267,12 @@ def run(
             if view_img:
                 if platform.system() == 'Linux' and p not in windows:
                     windows.append(p)
-                    cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
-                    cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
-                cv2.imshow(str(p), im0)
+                    cv2.namedWindow("Dectection", cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
+                    cv2.resizeWindow("Dectection", im0.shape[1], im0.shape[0])
+                for k in range(len(colAlign)):
+                    cv2.line(im0, (colAlign[k],1), (colAlign[k],639), (255,180,0), 2)
+                #print(im0.shape)
+                cv2.imshow("Dectection", im0) #str(p)
                 cv2.waitKey(1)  # 1 millisecond
 
             # Save results (image with detections)
@@ -286,14 +295,14 @@ def run(
                     vid_writer[i].write(im0)
 
         # Print time (inference-only)
-        #LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
+        #LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)') #Shows time per frame 
 
         # Logic gfor the nut tracking application
         if(nut_tracking):
             #CUSTOM CODE-----------------------------------------------------------------------------------------------------------
             if loaded == LoadedStatus.CAMERA_LOADED:
                 loaded = LoadedStatus.CAMERA_USED
-
+            print("\033[1mGood Nuts Processed:\033[0m"+str(goodCount)+"\t\033[1mBad Nuts Processed: \033[0m"+str(badCount)+"\t\033[1mTotal: \033[0m"+str(goodCount + badCount), end='\r')
             #Calc of jet activation time if bad
             for i in range(len(det)): 
                 class_prediction = det[i, 5].item()
@@ -312,8 +321,10 @@ def run(
                     
                     if class_prediction == 6:
                         confidence_values.Good = 1
+                        goodCount += 1
                     else:
                         confidence_values.Bad = 1
+                        badCount += 1
 
                     actTList = [actTime, confidence_values]
                     jet_time_matrix[jet_index] = jet_time_matrix[jet_index] + [actTList] #add new time entry
@@ -336,9 +347,8 @@ def run(
                 jetTemp = jet_time_matrix[i] # Get the times of the current jet
                 if len(jetTemp) > 1: # If there is a time in the current jet
                     if jetTemp[1][time_index] <= time_sync(): # get the first time in the list and check if is earlier or equal to right now
-                        if i == 4:
-                            print(str(jetTemp[1][confidence_values_index]))
-                            #print(jetTemp)
+                        #print(str(jetTemp[1][confidence_values_index]))
+                        #print(jetTemp)
                         LOGGER.debug("FIIIREEE!!!  " + str(i)) #Pretty self explanitory
 
                         if jetTemp[1][confidence_values_index].Good != 0 and jetTemp[1][confidence_values_index].Bad != 0: #if there is a mix of good and bad predictions for a jet time slot
@@ -399,9 +409,9 @@ def parse_opt():
     parser.add_argument('--project', default=ROOT / 'runs/detect', help='save results to project/name')
     parser.add_argument('--name', default='exp', help='save results to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
-    parser.add_argument('--line-thickness', default=3, type=int, help='bounding box thickness (pixels)')
-    parser.add_argument('--hide-labels', default=False, action='store_true', help='hide labels')
-    parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
+    parser.add_argument('--line-thickness', default=2, type=int, help='bounding box thickness (pixels)')
+    parser.add_argument('--hide-labels', default=True, action='store_true', help='hide labels')
+    parser.add_argument('--hide-conf', default=True, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
     parser.add_argument('--nut-tracking', default=True, action='store_true', help='Execute nut tracking')
