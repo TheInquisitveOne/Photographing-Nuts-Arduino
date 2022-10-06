@@ -223,6 +223,9 @@ def run(
         # pred = utils.general.apply_classifier(pred, classifier_model, im, im0s)
 
         # Process predictions
+        print("Before For")
+        print(pred)
+        
         for i, det in enumerate(pred):  # per image
             seen += 1
             if webcam:  # batch_size >= 1
@@ -262,8 +265,103 @@ def run(
                     if save_crop:
                         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
-            # Stream results
             im0 = annotator.result()
+
+            # Logic gfor the nut tracking application
+            print("After For")
+            print(det)
+            if(nut_tracking):
+                #CUSTOM CODE-----------------------------------------------------------------------------------------------------------
+                if loaded == LoadedStatus.CAMERA_LOADED:
+                    loaded = LoadedStatus.CAMERA_USED
+                #print("\033[1mGood Nuts Processed:\033[0m"+str(goodCount)+"\t\033[1mBad Nuts Processed: \033[0m"+str(badCount)+"\t\033[1mTotal: \033[0m"+str(goodCount + badCount), end='\r')
+                #Calc of jet activation time if bad
+                for j in range(len(det)): 
+                    class_prediction = det[j, 5].item()
+                    xpos = det[j,0]
+                    jet_index = nut_utils.GetJetIndex(xpos, colAlign)
+                    distance_to_Jet = (fHeight * (1 - det[j, 1] / h)) + b2J #Calculate distance between jet and nut
+                    time_to_jet = float((distance_to_Jet / speed)) #time to activate in sec
+                    actTime = time_sync() + time_to_jet #time to activate in program time space
+                    jetTemp = jet_time_matrix[jet_index]
+                    lowBow = actTime - timeWindow
+                    highBow = actTime + timeWindow
+                    time_matches = [t[time_index] for t in jet_time_matrix[jet_index] if t[time_index] >= lowBow and t[time_index] < highBow]
+                    if not time_matches:
+                        confidence_values = nut_utils.ConfidenceValues(0,0)
+                        #print(class_prediction)
+                        
+                        if class_prediction == 6:
+                            confidence_values.Good = 1
+                            goodCount += 1
+                        else:
+                            confidence_values.Bad = 1
+                            badCount += 1
+
+                        actTList = [actTime, confidence_values]
+                        jet_time_matrix[jet_index] = jet_time_matrix[jet_index] + [actTList] #add new time entry
+                    else:
+                        time_match = time_matches[0]
+                        activejet = jet_time_matrix[jet_index]
+                        time_match_list = [jet_time_matrix_object for jet_time_matrix_object in activejet if jet_time_matrix_object[time_index] == time_match][0]
+                        newjet = activejet
+                        new_time_match_list = [time_match, time_match_list[confidence_values_index]]
+
+                        if class_prediction == 6:
+                            new_time_match_list[confidence_values_index].Good += 1
+                        else:
+                            new_time_match_list[confidence_values_index].Bad += 1
+
+                        jet_time_matrix[jet_index] = [jet_time_matrix_object  if jet_time_matrix_object[time_index] != time_match else new_time_match_list for jet_time_matrix_object in jet_time_matrix[jet_index] ]
+
+                number_of_jets_range = range(len(jet_time_matrix))
+                for j in number_of_jets_range: #Send jet start to arduino when time has arrived
+                    jetTemp = jet_time_matrix[j] # Get the times of the current jet
+                    if len(jetTemp) > 1: # If there is a time in the current jet
+                        if jetTemp[1][time_index] <= time_sync(): # get the first time in the list and check if is earlier or equal to right now
+                            #print(str(jetTemp[1][confidence_values_index]))
+                            #print(jetTemp)
+                            LOGGER.debug("FIIIREEE!!!  " + str(j)) #Pretty self explanitory
+                            
+                            if jetTemp[1][confidence_values_index].Good != 0 and jetTemp[1][confidence_values_index].Bad != 0: #if there is a mix of good and bad predictions for a jet time slot
+
+                                if jetTemp[1][confidence_values_index].Bad/jetTemp[1][confidence_values_index].Good > 0.1 and jetTemp[1][confidence_values_index].Bad > 1:  #if more than 10% of predictions are bad
+                                    if j<11:
+                                        cv2.line(im0, (colAlign[j]-40,400), (colAlign[j]-40,510), (0,0,255), 20)
+                                    else:
+                                        cv2.line(im0, (colAlign[j-1]+40,400), (colAlign[j-1]+40,510), (0,0,255), 20)
+                                    jet_controller.TurnOnJet(13) #Send activation to arduino -----------------------------------------13 for testing
+
+
+
+                            elif jetTemp[1][confidence_values_index].Bad > 1: #if there is more than one bad prediction for a jet time slot
+                                    if j<11:
+                                        cv2.line(im0, (colAlign[j]-40,400), (colAlign[j]-40,510), (0,0,255), 20)
+                                    else:
+                                        cv2.line(im0, (colAlign[j-1]+40,400), (colAlign[j-1]+40,510), (0,0,255), 20)
+                                    jet_controller.TurnOnJet(13) #Send activation to arduino -----------------------------------------13 for testing
+
+
+                for j in number_of_jets_range: #Send jet stop to arduino when time has arrived
+                    jetTemp = jet_time_matrix[j]
+                    if len(jetTemp) > 1:
+                        if jetTemp[1][time_index] + jetBlast <= time_sync():
+                            jet_controller.TurnOffJet(13) #Send deactivation to arduino -----------------------------------------13 for testing
+                            jet_time_matrix[j].pop(1) #Remove the used time but keeping the fist zero for error reasons
+
+
+
+
+
+
+
+
+
+            # Stream results
+            #im0 = annotator.result()
+
+
+
             if view_img:
                 if platform.system() == 'Linux' and p not in windows:
                     windows.append(p)
@@ -294,84 +392,10 @@ def run(
                         vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                     vid_writer[i].write(im0)
 
-        # Print time (inference-only)
-        #LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)') #Shows time per frame 
+            # Print time (inference-only)
+            #LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)') #Shows time per frame 
 
-        # Logic gfor the nut tracking application
-        if(nut_tracking):
-            #CUSTOM CODE-----------------------------------------------------------------------------------------------------------
-            if loaded == LoadedStatus.CAMERA_LOADED:
-                loaded = LoadedStatus.CAMERA_USED
-            print("\033[1mGood Nuts Processed:\033[0m"+str(goodCount)+"\t\033[1mBad Nuts Processed: \033[0m"+str(badCount)+"\t\033[1mTotal: \033[0m"+str(goodCount + badCount), end='\r')
-            #Calc of jet activation time if bad
-            for i in range(len(det)): 
-                class_prediction = det[i, 5].item()
-                xpos = det[i,0]
-                jet_index = nut_utils.GetJetIndex(xpos, colAlign)
-                distance_to_Jet = (fHeight * (1 - det[i, 1] / h)) + b2J #Calculate distance between jet and nut
-                time_to_jet = float((distance_to_Jet / speed)) #time to activate in sec
-                actTime = time_sync() + time_to_jet #time to activate in program time space
-                jetTemp = jet_time_matrix[jet_index]
-                lowBow = actTime - timeWindow
-                highBow = actTime + timeWindow
-                time_matches = [t[time_index] for t in jet_time_matrix[jet_index] if t[time_index] >= lowBow and t[time_index] < highBow]
-                if not time_matches:
-                    confidence_values = nut_utils.ConfidenceValues(0,0)
-                    #print(class_prediction)
-                    
-                    if class_prediction == 6:
-                        confidence_values.Good = 1
-                        goodCount += 1
-                    else:
-                        confidence_values.Bad = 1
-                        badCount += 1
-
-                    actTList = [actTime, confidence_values]
-                    jet_time_matrix[jet_index] = jet_time_matrix[jet_index] + [actTList] #add new time entry
-                else:
-                    time_match = time_matches[0]
-                    activejet = jet_time_matrix[jet_index]
-                    time_match_list = [jet_time_matrix_object for jet_time_matrix_object in activejet if jet_time_matrix_object[time_index] == time_match][0]
-                    newjet = activejet
-                    new_time_match_list = [time_match, time_match_list[confidence_values_index]]
-
-                    if class_prediction == 6:
-                        new_time_match_list[confidence_values_index].Good += 1
-                    else:
-                        new_time_match_list[confidence_values_index].Bad += 1
-
-                    jet_time_matrix[jet_index] = [jet_time_matrix_object  if jet_time_matrix_object[time_index] != time_match else new_time_match_list for jet_time_matrix_object in jet_time_matrix[jet_index] ]
-
-            number_of_jets_range = range(len(jet_time_matrix))
-            for i in number_of_jets_range: #Send jet start to arduino when time has arrived
-                jetTemp = jet_time_matrix[i] # Get the times of the current jet
-                if len(jetTemp) > 1: # If there is a time in the current jet
-                    if jetTemp[1][time_index] <= time_sync(): # get the first time in the list and check if is earlier or equal to right now
-                        #print(str(jetTemp[1][confidence_values_index]))
-                        #print(jetTemp)
-                        LOGGER.debug("FIIIREEE!!!  " + str(i)) #Pretty self explanitory
-
-                        if jetTemp[1][confidence_values_index].Good != 0 and jetTemp[1][confidence_values_index].Bad != 0: #if there is a mix of good and bad predictions for a jet time slot
-
-                            if jetTemp[1][confidence_values_index].Bad/jetTemp[1][confidence_values_index].Good > 0.1 and jetTemp[1][confidence_values_index].Bad > 1:  #if more than 10% of predictions are bad
-
-                                jet_controller.TurnOnJet(13) #Send activation to arduino -----------------------------------------13 for testing
-
-
-
-                        elif jetTemp[1][confidence_values_index].Bad > 1: #if there is more than one bad prediction for a jet time slot
-                            
-                                jet_controller.TurnOnJet(13) #Send activation to arduino -----------------------------------------13 for testing
-
-
-            for i in number_of_jets_range: #Send jet stop to arduino when time has arrived
-                jetTemp = jet_time_matrix[i]
-                if len(jetTemp) > 1:
-                    if jetTemp[1][time_index] + jetBlast <= time_sync():
-                        jet_controller.TurnOffJet(13) #Send deactivation to arduino -----------------------------------------13 for testing
-                        jet_time_matrix[i].pop(1) #Remove the used time but keeping the fist zero for error reasons
-
-
+            
     
 
 
